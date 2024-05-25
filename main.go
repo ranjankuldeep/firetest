@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -81,7 +82,7 @@ func ExampleNetworkInterface_rateLimiting() {
 		WithBucketSize(5).
 		WithRefillDuration(5 * time.Second)
 
-	// create the inbound rate limiter
+	// create the inbound rate limiter.
 	inbound := firecracker.NewRateLimiter(bandwidthBuilder.Build(), opsBuilder.Build())
 
 	bandwidthBuilder = bandwidthBuilder.WithBucketSize(1024 * 1024 * 10)
@@ -92,10 +93,20 @@ func ExampleNetworkInterface_rateLimiting() {
 	outbound := firecracker.NewRateLimiter(bandwidthBuilder.Build(), opsBuilder.Build())
 
 	// network interface with static configuration
+	// Hardcoded the data.
 	networkIfaces := []firecracker.NetworkInterface{{
 		StaticConfiguration: &firecracker.StaticNetworkConfiguration{
 			MacAddress:  "AA:FC:00:00:00:01",
 			HostDevName: "tap0",
+			IPConfiguration: &firecracker.IPConfiguration{
+				IPAddr: net.IPNet{
+					IP:   net.IPv4(172, 16, 0, 2),
+					Mask: net.IPMask{255, 255, 255, 0},
+				},
+				Gateway:     net.IPv4(172, 16, 0, 1),
+				Nameservers: []string{"8.8.8.8"},
+				IfName:      "eth0",
+			},
 		},
 		InRateLimiter:  inbound,
 		OutRateLimiter: outbound,
@@ -103,9 +114,9 @@ func ExampleNetworkInterface_rateLimiting() {
 
 	// config file for the firecracker process.
 	cfg := firecracker.Config{
-		SocketPath:      socketPath,
+		SocketPath:      "api.socket",
 		KernelImagePath: "../vmlinux-5.10.210",
-		Drives:          firecracker.NewDrivesBuilder("../ubuntu-22.04.ext4").Build(),
+		Drives:          firecracker.NewDrivesBuilder("../ubuntu-22.04.ext4.3").Build(),
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(1),
 			MemSizeMib: firecracker.Int64(1024),
@@ -144,7 +155,11 @@ func ExampleNetworkInterface_rateLimiting() {
 	if err := m.Start(ctx); err != nil {
 		panic(fmt.Errorf("failed to initialize machine: %v", err))
 	}
-
+	info, err := m.DescribeInstanceInfo(ctx)
+	if err != nil {
+		fmt.Println("Unable to fetch the VM Info: ", err)
+	}
+	fmt.Println(*info.State, *info.ID, *info.AppName)
 	// wait for VMM to execute
 	if err := m.Wait(ctx); err != nil {
 		panic(err)
@@ -153,22 +168,23 @@ func ExampleNetworkInterface_rateLimiting() {
 
 // JAILER CONFIGURATION
 func ExampleJailerConfig_enablingJailer() {
+	const socketPath = "api.socket"
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)
 	defer vmmCancel()
 
-	const id = "my-jailer-test"
-	const path = "/path/to/jailer-workspace"
-	const kernelImagePath = "/path/to/kernel-image"
+	const id = "4569"
+	//
+	const kernelImagePath = "../vmlinux-5.10.210"
 
 	uid := 123
 	gid := 100
 
 	fcCfg := firecracker.Config{
-		SocketPath:      "api.socket",
+		SocketPath:      socketPath,
 		KernelImagePath: kernelImagePath,
 		KernelArgs:      "console=ttyS0 reboot=k panic=1 pci=off",
-		Drives:          firecracker.NewDrivesBuilder("/path/to/rootfs").Build(),
+		Drives:          firecracker.NewDrivesBuilder("../ubuntu-22.04.ext4.3").Build(),
 		LogLevel:        "Debug",
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(1),
@@ -180,16 +196,18 @@ func ExampleJailerConfig_enablingJailer() {
 			GID:            &gid,
 			ID:             id,
 			NumaNode:       firecracker.Int(0),
-			ChrootBaseDir:  path,
+			JailerBinary:   "../jailer",
+			ChrootBaseDir:  "/srv/jailer",
+			CgroupVersion:  "2",
 			ChrootStrategy: firecracker.NewNaiveChrootStrategy(kernelImagePath),
-			ExecFile:       "/path/to/firecracker-binary",
+			ExecFile:       "../firecracker",
 		},
 	}
 
 	// Check if kernel image is readable
 	f, err := os.Open(fcCfg.KernelImagePath)
 	if err != nil {
-		panic(fmt.Errorf("Failed to open kernel image: %v", err))
+		panic(fmt.Errorf("failed to open kernel image: %v", err))
 	}
 	f.Close()
 
@@ -198,7 +216,7 @@ func ExampleJailerConfig_enablingJailer() {
 		drivePath := firecracker.StringValue(drive.PathOnHost)
 		f, err := os.OpenFile(drivePath, os.O_RDWR, 0666)
 		if err != nil {
-			panic(fmt.Errorf("Failed to open drive with read/write permissions: %v", err))
+			panic(fmt.Errorf("failed to open drive with read/write permissions: %v", err))
 		}
 		f.Close()
 	}
@@ -206,21 +224,23 @@ func ExampleJailerConfig_enablingJailer() {
 	logger := log.New()
 	m, err := firecracker.NewMachine(vmmCtx, fcCfg, firecracker.WithLogger(log.NewEntry(logger)))
 	if err != nil {
+		log.Println(err)
 		panic(err)
 	}
 
 	if err := m.Start(vmmCtx); err != nil {
+		log.Println(err)
 		panic(err)
 	}
 	defer m.StopVMM()
 
 	// wait for the VMM to exit
 	if err := m.Wait(vmmCtx); err != nil {
+		log.Println(err)
 		panic(err)
 	}
 }
 
 func main() {
-	// ExampleWithProcessRunner_logging()
-	ExampleNetworkInterface_rateLimiting()
+	ExampleJailerConfig_enablingJailer()
 }
