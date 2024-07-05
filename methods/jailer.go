@@ -13,6 +13,15 @@ import (
 
 // JAILER CONFIGURATION
 func ExampleJailerConfig_enablingJailer() {
+	UID := 123
+	GID := 100
+	nsPath, err := CreateContainer("testVm")
+	if err != nil {
+		panic(err)
+	}
+	if err := SetUpSandBoxNetwork(nsPath, UID, GID); err != nil {
+		panic(err)
+	}
 	const socketPath = "api.socket"
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)
@@ -21,12 +30,10 @@ func ExampleJailerConfig_enablingJailer() {
 	const id = "4569"
 	//
 	const kernelImagePath = "../vmlinux-5.10.210"
-
-	uid := 123
-	gid := 100
 	networkIfaces := []firecracker.NetworkInterface{{
 		StaticConfiguration: &firecracker.StaticNetworkConfiguration{
-			MacAddress:  "AA:FC:00:00:00:01",
+			// MacAddress:  "AA:FC:00:00:00:01", // potential bug here
+			MacAddress:  "52:54:00:ab:cd:ef",
 			HostDevName: "tap0",
 			IPConfiguration: &firecracker.IPConfiguration{
 				IPAddr: net.IPNet{
@@ -52,8 +59,8 @@ func ExampleJailerConfig_enablingJailer() {
 			MemSizeMib: firecracker.Int64(1024),
 		},
 		JailerCfg: &firecracker.JailerConfig{
-			UID:            &uid,
-			GID:            &gid,
+			UID:            &UID,
+			GID:            &GID,
 			ID:             id,
 			NumaNode:       firecracker.Int(0),
 			JailerBinary:   "../jailer",
@@ -65,6 +72,7 @@ func ExampleJailerConfig_enablingJailer() {
 			ChrootStrategy: firecracker.NewNaiveChrootStrategy(kernelImagePath),
 			ExecFile:       "../firecracker",
 		},
+		NetNS:             nsPath,
 		NetworkInterfaces: networkIfaces,
 	}
 
