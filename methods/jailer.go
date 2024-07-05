@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
@@ -23,6 +24,21 @@ func ExampleJailerConfig_enablingJailer() {
 
 	uid := 123
 	gid := 100
+	networkIfaces := []firecracker.NetworkInterface{{
+		StaticConfiguration: &firecracker.StaticNetworkConfiguration{
+			MacAddress:  "AA:FC:00:00:00:01",
+			HostDevName: "tap0",
+			IPConfiguration: &firecracker.IPConfiguration{
+				IPAddr: net.IPNet{
+					IP:   net.IPv4(172, 16, 0, 2),
+					Mask: net.IPMask{255, 255, 255, 0},
+				},
+				Gateway:     net.IPv4(172, 16, 0, 1),
+				Nameservers: []string{"8.8.8.8"},
+				IfName:      "eth0",
+			},
+		},
+	}}
 
 	fcCfg := firecracker.Config{
 		SocketPath:      socketPath,
@@ -33,7 +49,7 @@ func ExampleJailerConfig_enablingJailer() {
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(1),
 			Smt:        firecracker.Bool(false),
-			MemSizeMib: firecracker.Int64(256),
+			MemSizeMib: firecracker.Int64(1024),
 		},
 		JailerCfg: &firecracker.JailerConfig{
 			UID:            &uid,
@@ -42,10 +58,14 @@ func ExampleJailerConfig_enablingJailer() {
 			NumaNode:       firecracker.Int(0),
 			JailerBinary:   "../jailer",
 			ChrootBaseDir:  "/srv/jailer",
+			Stdin:          os.Stdin,
+			Stdout:         os.Stdout,
+			Stderr:         os.Stderr,
 			CgroupVersion:  "2",
 			ChrootStrategy: firecracker.NewNaiveChrootStrategy(kernelImagePath),
 			ExecFile:       "../firecracker",
 		},
+		NetworkInterfaces: networkIfaces,
 	}
 
 	// Check if kernel image is readable
