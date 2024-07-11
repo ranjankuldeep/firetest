@@ -1,6 +1,6 @@
 build: 
-	@go build -o bin/firetest
+	go build -o bin/firetest
 run: build
-	@sudo -E ./bin/firetest
+	sudo ./bin/firetest
 test: 
-	@go test ./...
+	go test ./...

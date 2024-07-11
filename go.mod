@@ -7,7 +7,10 @@ toolchain go1.22.3
 require (
 	github.com/docker/docker v27.0.3+incompatible
 	github.com/firecracker-microvm/firecracker-go-sdk v1.0.0
+	github.com/freddierice/go-losetup v0.0.0-20170407175016-fc9adea44124
 	github.com/sirupsen/logrus v1.9.3
+	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5
+	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f
 	github.com/weaveworks/ignite v0.10.0
 )
 
@@ -50,8 +53,6 @@ require (
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5 // indirect
-	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f // indirect
 	go.mongodb.org/mongo-driver v1.8.3 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.53.0 // indirect
 	go.opentelemetry.io/otel v1.28.0 // indirect
