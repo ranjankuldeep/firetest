@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	models "github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -49,6 +51,10 @@ func JailerEnabledVM() {
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)
 	defer vmmCancel()
+
+	// jailerRootDir := "/srv/jailer/firecracker/4569/root/"
+	// mapperDir := filepath.Join(jailerRootDir, "dev/mapper")
+	// bindMountPoint := filepath.Join(mapperDir, filepath.Base(overlayDevice))
 
 	networkIfaces := []firecracker.NetworkInterface{{
 		StaticConfiguration: &firecracker.StaticNetworkConfiguration{
@@ -96,22 +102,22 @@ func JailerEnabledVM() {
 		NetworkInterfaces: networkIfaces,
 	}
 
-	// Check if kernel image is readable
-	f, err := os.Open(fcCfg.KernelImagePath)
-	if err != nil {
-		panic(fmt.Errorf("failed to open kernel image: %v", err))
-	}
-	f.Close()
+	// // Check if kernel image is readable
+	// f, err := os.Open(fcCfg.KernelImagePath)
+	// if err != nil {
+	// 	panic(fmt.Errorf("failed to open kernel image: %v", err))
+	// }
+	// f.Close()
 
-	// Check each drive is readable and writable
-	for _, drive := range fcCfg.Drives {
-		drivePath := firecracker.StringValue(drive.PathOnHost)
-		f, err := os.OpenFile(drivePath, os.O_RDWR, 0666)
-		if err != nil {
-			panic(fmt.Errorf("failed to open drive with read/write permissions: %v", err))
-		}
-		f.Close()
-	}
+	// // Check each drive is readable and writable
+	// for _, drive := range fcCfg.Drives {
+	// 	drivePath := firecracker.StringValue(drive.PathOnHost)
+	// 	f, err := os.OpenFile(drivePath, os.O_RDWR, 0666)
+	// 	if err != nil {
+	// 		panic(fmt.Errorf("failed to open drive with read/write permissions: %v", err))
+	// 	}
+	// 	f.Close()
+	// }
 
 	m, err := firecracker.NewMachine(vmmCtx, fcCfg)
 	if err != nil {
@@ -129,5 +135,63 @@ func JailerEnabledVM() {
 	if err := m.Wait(vmmCtx); err != nil {
 		log.Println(err)
 		panic(err)
+	}
+}
+
+func bindMount(source, target string) error {
+	cmd := exec.Command("mount", "--bind", source, target)
+	return cmd.Run()
+}
+
+type PrePlacedFilesStrategy struct {
+	KernelImagePath string
+}
+
+func NewPrePlacedFilesStrategy(kernelImagePath string) PrePlacedFilesStrategy {
+	return PrePlacedFilesStrategy{
+		KernelImagePath: kernelImagePath,
+	}
+}
+
+func (s PrePlacedFilesStrategy) AdaptHandlers(handlers *firecracker.Handlers) error {
+	// if !handlers.FcInit.Has(CreateLogFilesHandlerName) {
+	// 	log.Println("ehllo")
+	// 	return firecracker.ErrRequiredHandlerMissing
+	// }
+
+	handlers.FcInit = handlers.FcInit.AppendAfter(
+		CreateLogFilesHandlerName,
+		LinkKernelImageHandler(filepath.Base(s.KernelImagePath)),
+	)
+
+	return nil
+}
+
+func LinkKernelImageHandler(kernelImageFileName string) firecracker.Handler {
+	log.Println(kernelImageFileName)
+	return firecracker.Handler{
+		Name: LinkFilesToRootFSHandlerName,
+		Fn: func(ctx context.Context, m *firecracker.Machine) error {
+			if m.Cfg.JailerCfg == nil {
+				return firecracker.ErrMissingJailerConfig
+			}
+
+			rootfs := filepath.Join(
+				m.Cfg.JailerCfg.ChrootBaseDir,
+				filepath.Base(m.Cfg.JailerCfg.ExecFile),
+				m.Cfg.JailerCfg.ID,
+				rootfsFolderName,
+			)
+
+			if err := os.Link(
+				m.Cfg.KernelImagePath,
+				filepath.Join(rootfs, kernelImageFileName),
+			); err != nil {
+				return err
+			}
+			log.Println(kernelImageFileName)
+			m.Cfg.KernelImagePath = kernelImageFileName
+			return nil
+		},
 	}
 }

@@ -50,7 +50,7 @@ func CreateContainer(name string) (string, error) {
 	hostConfig := &container.HostConfig{
 		AutoRemove:  true,
 		NetworkMode: container.NetworkMode(networkResp.ID),
-	}
+	} 
 
 	// Create the container
 	containerResp, err := cli.ContainerCreate(
